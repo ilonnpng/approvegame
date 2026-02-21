@@ -677,8 +677,8 @@ const io = new Server(httpServer, {
     methods: ["GET", "POST"],
     credentials: true
   },
-  // Важно: polling ПЕРВЫМ для ngrok
-  transports: ['polling', 'websocket'],
+  // WebSocket для продакшн (wss://)
+  transports: ['websocket', 'polling'],
   allowEIO3: true,
   pingTimeout: 60000,
   pingInterval: 25000
