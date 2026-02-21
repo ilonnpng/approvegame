@@ -30,7 +30,7 @@ const PROFESSION_DATA = [
       "Какой ваш любимый фильм или театральная постановка?",
       "В каких спектаклях вы играли раньше?"
     ],
-    image: `${BASE}/prof-act1.png`
+    image: `${BASE}/prof-act.png`
   },
   {
     id: "architect",
@@ -48,7 +48,7 @@ const PROFESSION_DATA = [
       "Каков ваш подход к дизайну?",
       "Какие тренды в архитектуре вас вдохновляют?"
     ],
-    image: `${BASE}/prof-arh1.png`
+    image: `${BASE}/prof-arh.png`
   },
   {
     id: "doctor",
@@ -65,7 +65,7 @@ const PROFESSION_DATA = [
       "Что вы знаете о нашей организации и пациентах?",
       "Что вы знаете о клятве Гиппократа?"
     ],
-    image: `${BASE}/prof-vrach1.png`
+    image: `${BASE}/prof-vrach.png`
   },
   {
     id: "designer",
@@ -83,7 +83,7 @@ const PROFESSION_DATA = [
       "Какой будет основной тренд в дизайне?",
       "Какие ваши источники вдохновения?"
     ],
-    image: `${BASE}/prof-design1.png`
+    image: `${BASE}/prof-design.png`
   },
   {
     id: "journalist",
@@ -100,7 +100,7 @@ const PROFESSION_DATA = [
       "Есть ли журналисты, которые вас вдохновляют?",
       "Взялись бы вы за статью, которая может испортить репутацию?"
     ],
-    image: `${BASE}/prof-zhur1.png`
+    image: `${BASE}/prof-zhur.png`
   },
   {
     id: "marketer",
@@ -118,7 +118,7 @@ const PROFESSION_DATA = [
       "За какими брендами следите?",
       "Как будете работать при отключении электричества?"
     ],
-    image: `${BASE}/prof-mark1.png`
+    image: `${BASE}/prof-mark.png`
   },
   {
     id: "teacher",
@@ -135,7 +135,7 @@ const PROFESSION_DATA = [
       "Как реагируете на плохую дисциплину?",
       "Какую тему сложнее всего преподавать?"
     ],
-    image: `${BASE}/prof-ped1.png`
+    image: `${BASE}/prof-ped.png`
   },
   {
     id: "translator",
@@ -152,7 +152,7 @@ const PROFESSION_DATA = [
       "Как справляетесь со сложным переводом?",
       "Как обрабатываете нестандартные запросы?"
     ],
-    image: `${BASE}/prof-trans1.png`
+    image: `${BASE}/prof-trans.png`
   },
   {
     id: "police",
@@ -169,7 +169,7 @@ const PROFESSION_DATA = [
       "Бывали ли в опасных ситуациях?",
       "Почему хотите работать у нас?"
     ],
-    image: `${BASE}/prof-pol1.png`
+    image: `${BASE}/prof-pol.png`
   },
   {
     id: "entrepreneur",
@@ -186,7 +186,7 @@ const PROFESSION_DATA = [
       "Есть ли сотрудники?",
       "Кто ваша аудитория?"
     ],
-    image: `${BASE}/prof-ip1.png`
+    image: `${BASE}/prof-ip.png`
   }
 ];
 
