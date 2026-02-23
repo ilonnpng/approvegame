@@ -698,7 +698,7 @@ function shuffle(array) {
 }
 
 // Создать новую комнату
-function createRoom(roomCode, creatorId, creatorName) {
+function createRoom(roomCode, creatorId, creatorName, gameMode = 'group') {
   const room = {
     code: roomCode,
     hostId: creatorId,
@@ -714,6 +714,7 @@ function createRoom(roomCode, creatorId, creatorName) {
       }
     ],
     phase: 'lobby',
+    gameMode: gameMode, // Режим игры: 'group' или 'audience'
     currentPlayerIndex: 0,
     deck: shuffle(generateCardDeck()),
     sabotageDeck: shuffle(generateSabotageDeck()),
@@ -729,14 +730,14 @@ io.on('connection', (socket) => {
   console.log(`Пользователь подключился: ${socket.id}`);
 
   // Создать комнату
-  socket.on('create_room', ({ name }) => {
+  socket.on('create_room', ({ name, gameMode = 'group' }) => {
     const roomCode = Math.random().toString(36).substring(2, 8).toUpperCase();
-    const room = createRoom(roomCode, socket.id, name);
+    const room = createRoom(roomCode, socket.id, name, gameMode);
     
     socket.join(roomCode);
     socket.emit('room_update', room);
     
-    console.log(`Комната создана: ${roomCode} by ${name}`);
+    console.log(`Комната создана: ${roomCode} by ${name} (режим: ${gameMode})`);
   });
 
   // Присоединиться к комнате
