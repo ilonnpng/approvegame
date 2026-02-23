@@ -754,6 +754,16 @@ io.on('connection', (socket) => {
     const existingPlayerById = room.players.find(p => p.id === socket.id);
     
     if (existingPlayerByName && !existingPlayerById) {
+      // Это может быть переподключение ИЛИ попытка войти с занятым ником
+      // Проверяем: если игрок с таким именем уже есть и активен - отклоняем
+      const existingSocket = io.sockets.sockets.get(existingPlayerByName.id);
+      if (existingSocket && existingSocket.connected) {
+        // Имя занято активным игроком
+        socket.emit('error', { message: 'Это имя уже занято. Придумайте другое имя.' });
+        console.log(`❌ Player tried to join with duplicate name: ${name} in room ${code}`);
+        return;
+      }
+      
       // Переподключение - обновить socket.id
       console.log(`🔄 Player ${name} reconnecting to ${code}, updating socket ID from ${existingPlayerByName.id} to ${socket.id}`);
       existingPlayerByName.id = socket.id;
