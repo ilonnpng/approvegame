@@ -2,6 +2,7 @@ const express = require('express');
 const { createServer } = require('http');
 const { Server } = require('socket.io');
 const cors = require('cors');
+const https = require('https');
 
 const app = express();
 app.use(cors());
@@ -667,6 +668,29 @@ app.get('/health', (req, res) => {
     status: 'healthy',
     uptime: process.uptime(),
     rooms: rooms.size
+  });
+});
+
+// =====================================================
+// IMAGE PROXY для России (обход блокировки R2)
+// =====================================================
+app.get('/proxy-image/:filename', (req, res) => {
+  const filename = req.params.filename;
+  const imageUrl = `https://pub-cfd4a1112c8643b0ab5e89b05484e7fa.r2.dev/${filename}`;
+  
+  console.log(`📷 Proxying image: ${filename}`);
+  
+  https.get(imageUrl, (proxyRes) => {
+    // Передать заголовки
+    res.setHeader('Content-Type', proxyRes.headers['content-type'] || 'image/png');
+    res.setHeader('Cache-Control', 'public, max-age=31536000'); // Кэш на 1 год
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    
+    // Передать поток данных
+    proxyRes.pipe(res);
+  }).on('error', (err) => {
+    console.error(`❌ Error proxying image ${filename}:`, err);
+    res.status(500).send('Error loading image');
   });
 });
 
