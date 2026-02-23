@@ -8,7 +8,6 @@ app.use(cors());
 
 // =====================================================
 // ИМПОРТ ДАННЫХ ИЗ ФАЙЛА
-
 // =====================================================
 
 // База профессий с полными данными
@@ -29,7 +28,7 @@ const PROFESSION_DATA = [
       "Какой ваш любимый фильм или театральная постановка?",
       "В каких спектаклях вы играли раньше?"
     ],
-    image: "https://pub-cfd4a1112c8643b0ab5e89b05484e7fa.r2.dev/prof-act.png"
+    image: "prof-act.png"
   },
   {
     id: "architect",
@@ -47,7 +46,7 @@ const PROFESSION_DATA = [
       "Каков ваш подход к дизайну?",
       "Какие тренды в архитектуре вас вдохновляют?"
     ],
-    image: "https://pub-cfd4a1112c8643b0ab5e89b05484e7fa.r2.dev/prof-arh.png"
+    image: "prof-arh.png"
   },
   {
     id: "doctor",
@@ -64,7 +63,7 @@ const PROFESSION_DATA = [
       "Что вы знаете о нашей организации и пациентах?",
       "Что вы знаете о клятве Гиппократа?"
     ],
-    image: "https://pub-cfd4a1112c8643b0ab5e89b05484e7fa.r2.dev/prof-vrach.png"
+    image: "prof-vrach.png"
   },
   {
     id: "designer",
@@ -82,7 +81,7 @@ const PROFESSION_DATA = [
       "Какой будет основной тренд в дизайне?",
       "Какие ваши источники вдохновения?"
     ],
-    image: "https://pub-cfd4a1112c8643b0ab5e89b05484e7fa.r2.dev/prof-design.png"
+    image: "prof-design.png"
   },
   {
     id: "journalist",
@@ -99,7 +98,7 @@ const PROFESSION_DATA = [
       "Есть ли журналисты, которые вас вдохновляют?",
       "Взялись бы вы за статью, которая может испортить репутацию?"
     ],
-    image: "https://pub-cfd4a1112c8643b0ab5e89b05484e7fa.r2.dev/prof-zhur.png"
+    image: "prof-zhur.png"
   },
   {
     id: "marketer",
@@ -117,7 +116,7 @@ const PROFESSION_DATA = [
       "За какими брендами следите?",
       "Как будете работать при отключении электричества?"
     ],
-    image: "https://pub-cfd4a1112c8643b0ab5e89b05484e7fa.r2.dev/prof-mark.png"
+    image: "prof-mark.png"
   },
   {
     id: "teacher",
@@ -134,7 +133,7 @@ const PROFESSION_DATA = [
       "Как реагируете на плохую дисциплину?",
       "Какую тему сложнее всего преподавать?"
     ],
-    image: "https://pub-cfd4a1112c8643b0ab5e89b05484e7fa.r2.dev/prof-ped.png"
+    image: "prof-ped.png"
   },
   {
     id: "translator",
@@ -151,7 +150,7 @@ const PROFESSION_DATA = [
       "Как справляетесь со сложным переводом?",
       "Как обрабатываете нестандартные запросы?"
     ],
-    image: "https://pub-cfd4a1112c8643b0ab5e89b05484e7fa.r2.dev/prof-trans.png"
+    image: "prof-trans.png"
   },
   {
     id: "police",
@@ -168,7 +167,7 @@ const PROFESSION_DATA = [
       "Бывали ли в опасных ситуациях?",
       "Почему хотите работать у нас?"
     ],
-    image: "https://pub-cfd4a1112c8643b0ab5e89b05484e7fa.r2.dev/prof-pol.png"
+    image: "prof-pol.png"
   },
   {
     id: "entrepreneur",
@@ -185,7 +184,7 @@ const PROFESSION_DATA = [
       "Есть ли сотрудники?",
       "Кто ваша аудитория?"
     ],
-    image: "https://pub-cfd4a1112c8643b0ab5e89b05484e7fa.r2.dev/prof-ip.png"
+    image: "prof-ip.png"
   }
 ];
 
@@ -193,129 +192,129 @@ const PROFESSION_DATA = [
 const PROFESSIONS = PROFESSION_DATA.map(p => p.name);
 
 const ADDITION_IMAGES = [
-  "https://pub-cfd4a1112c8643b0ab5e89b05484e7fa.r2.dev/dop-course.png",
-  "https://pub-cfd4a1112c8643b0ab5e89b05484e7fa.r2.dev/dop-dad.png",
-  "https://pub-cfd4a1112c8643b0ab5e89b05484e7fa.r2.dev/dop-excel.png",
-  "https://pub-cfd4a1112c8643b0ab5e89b05484e7fa.r2.dev/dop-fish.png",
-  "https://pub-cfd4a1112c8643b0ab5e89b05484e7fa.r2.dev/dop-foodcourse.png",
-  "https://pub-cfd4a1112c8643b0ab5e89b05484e7fa.r2.dev/dop-grandmother.png",
-  "https://pub-cfd4a1112c8643b0ab5e89b05484e7fa.r2.dev/dop-joke.png",
-  "https://pub-cfd4a1112c8643b0ab5e89b05484e7fa.r2.dev/dop-kiosk.png",
-  "https://pub-cfd4a1112c8643b0ab5e89b05484e7fa.r2.dev/dop-lastwork.png",
-  "https://pub-cfd4a1112c8643b0ab5e89b05484e7fa.r2.dev/dop-mgu.png",
-  "https://pub-cfd4a1112c8643b0ab5e89b05484e7fa.r2.dev/dop-million.png",
-  "https://pub-cfd4a1112c8643b0ab5e89b05484e7fa.r2.dev/dop-noski.png",
-  "https://pub-cfd4a1112c8643b0ab5e89b05484e7fa.r2.dev/dop-pirozhki.png",
-  "https://pub-cfd4a1112c8643b0ab5e89b05484e7fa.r2.dev/dop-sber.png",
-  "https://pub-cfd4a1112c8643b0ab5e89b05484e7fa.r2.dev/dop-tank.png"
+  "dop-course.png",
+  "dop-dad.png",
+  "dop-excel.png",
+  "dop-fish.png",
+  "dop-foodcourse.png",
+  "dop-grandmother.png",
+  "dop-joke.png",
+  "dop-kiosk.png",
+  "dop-lastwork.png",
+  "dop-mgu.png",
+  "dop-million.png",
+  "dop-noski.png",
+  "dop-pirozhki.png",
+  "dop-sber.png",
+  "dop-tank.png"
 ];
 
 const AGE_IMAGES = [
-  "https://pub-cfd4a1112c8643b0ab5e89b05484e7fa.r2.dev/age18.png",
-  "https://pub-cfd4a1112c8643b0ab5e89b05484e7fa.r2.dev/age20.png",
-  "https://pub-cfd4a1112c8643b0ab5e89b05484e7fa.r2.dev/age22.png",
-  "https://pub-cfd4a1112c8643b0ab5e89b05484e7fa.r2.dev/age24.png",
-  "https://pub-cfd4a1112c8643b0ab5e89b05484e7fa.r2.dev/age26.png",
-  "https://pub-cfd4a1112c8643b0ab5e89b05484e7fa.r2.dev/age28.png",
-  "https://pub-cfd4a1112c8643b0ab5e89b05484e7fa.r2.dev/age30.png",
-  "https://pub-cfd4a1112c8643b0ab5e89b05484e7fa.r2.dev/age32.png",
-  "https://pub-cfd4a1112c8643b0ab5e89b05484e7fa.r2.dev/age34.png",
-  "https://pub-cfd4a1112c8643b0ab5e89b05484e7fa.r2.dev/age36.png",
-  "https://pub-cfd4a1112c8643b0ab5e89b05484e7fa.r2.dev/age38.png",
-  "https://pub-cfd4a1112c8643b0ab5e89b05484e7fa.r2.dev/age40.png",
-  "https://pub-cfd4a1112c8643b0ab5e89b05484e7fa.r2.dev/age42.png",
-  "https://pub-cfd4a1112c8643b0ab5e89b05484e7fa.r2.dev/age44.png",
-  "https://pub-cfd4a1112c8643b0ab5e89b05484e7fa.r2.dev/age46.png",
-  "https://pub-cfd4a1112c8643b0ab5e89b05484e7fa.r2.dev/age48.png",
-  "https://pub-cfd4a1112c8643b0ab5e89b05484e7fa.r2.dev/age50.png",
-  "https://pub-cfd4a1112c8643b0ab5e89b05484e7fa.r2.dev/age52.png",
-  "https://pub-cfd4a1112c8643b0ab5e89b05484e7fa.r2.dev/age54.png",
-  "https://pub-cfd4a1112c8643b0ab5e89b05484e7fa.r2.dev/age56.png",
-  "https://pub-cfd4a1112c8643b0ab5e89b05484e7fa.r2.dev/age58.png",
-  "https://pub-cfd4a1112c8643b0ab5e89b05484e7fa.r2.dev/age60.png",
-  "https://pub-cfd4a1112c8643b0ab5e89b05484e7fa.r2.dev/age70.png",
-  "https://pub-cfd4a1112c8643b0ab5e89b05484e7fa.r2.dev/age80.png"
+  "age18.png",
+  "age20.png",
+  "age22.png",
+  "age24.png",
+  "age26.png",
+  "age28.png",
+  "age30.png",
+  "age32.png",
+  "age34.png",
+  "age36.png",
+  "age38.png",
+  "age40.png",
+  "age42.png",
+  "age44.png",
+  "age46.png",
+  "age48.png",
+  "age50.png",
+  "age52.png",
+  "age54.png",
+  "age56.png",
+  "age58.png",
+  "age60.png",
+  "age70.png",
+  "age80.png"
 ];
 
 const SKILL_IMAGES = [
-  "https://pub-cfd4a1112c8643b0ab5e89b05484e7fa.r2.dev/nav-analiz.png",
-  "https://pub-cfd4a1112c8643b0ab5e89b05484e7fa.r2.dev/nav-code.png",
-  "https://pub-cfd4a1112c8643b0ab5e89b05484e7fa.r2.dev/nav-cvet.png",
-  "https://pub-cfd4a1112c8643b0ab5e89b05484e7fa.r2.dev/nav-doc.png",
-  "https://pub-cfd4a1112c8643b0ab5e89b05484e7fa.r2.dev/nav-dogovor.png",
-  "https://pub-cfd4a1112c8643b0ab5e89b05484e7fa.r2.dev/nav-eskiz.png",
-  "https://pub-cfd4a1112c8643b0ab5e89b05484e7fa.r2.dev/nav-finanaliz.png",
-  "https://pub-cfd4a1112c8643b0ab5e89b05484e7fa.r2.dev/nav-fingram.png",
-  "https://pub-cfd4a1112c8643b0ab5e89b05484e7fa.r2.dev/nav-graf.png",
-  "https://pub-cfd4a1112c8643b0ab5e89b05484e7fa.r2.dev/nav-help.png",
-  "https://pub-cfd4a1112c8643b0ab5e89b05484e7fa.r2.dev/nav-him.png",
-  "https://pub-cfd4a1112c8643b0ab5e89b05484e7fa.r2.dev/nav-isk.png",
-  "https://pub-cfd4a1112c8643b0ab5e89b05484e7fa.r2.dev/nav-konsul.png",
-  "https://pub-cfd4a1112c8643b0ab5e89b05484e7fa.r2.dev/nav-lab.png",
-  "https://pub-cfd4a1112c8643b0ab5e89b05484e7fa.r2.dev/nav-lang.png",
-  "https://pub-cfd4a1112c8643b0ab5e89b05484e7fa.r2.dev/nav-med.png",
-  "https://pub-cfd4a1112c8643b0ab5e89b05484e7fa.r2.dev/nav-mimika.png",
-  "https://pub-cfd4a1112c8643b0ab5e89b05484e7fa.r2.dev/nav-ocen.png",
-  "https://pub-cfd4a1112c8643b0ab5e89b05484e7fa.r2.dev/nav-ped.png",
-  "https://pub-cfd4a1112c8643b0ab5e89b05484e7fa.r2.dev/nav-po.png",
-  "https://pub-cfd4a1112c8643b0ab5e89b05484e7fa.r2.dev/nav-podstroy.png",
-  "https://pub-cfd4a1112c8643b0ab5e89b05484e7fa.r2.dev/nav-presech.png",
-  "https://pub-cfd4a1112c8643b0ab5e89b05484e7fa.r2.dev/nav-prodvi.png",
-  "https://pub-cfd4a1112c8643b0ab5e89b05484e7fa.r2.dev/nav-rech.png",
-  "https://pub-cfd4a1112c8643b0ab5e89b05484e7fa.r2.dev/nav-rescom.png",
-  "https://pub-cfd4a1112c8643b0ab5e89b05484e7fa.r2.dev/nav-role.png",
-  "https://pub-cfd4a1112c8643b0ab5e89b05484e7fa.r2.dev/nav-smi.png",
-  "https://pub-cfd4a1112c8643b0ab5e89b05484e7fa.r2.dev/nav-state.png",
-  "https://pub-cfd4a1112c8643b0ab5e89b05484e7fa.r2.dev/nav-stroy.png",
-  "https://pub-cfd4a1112c8643b0ab5e89b05484e7fa.r2.dev/nav-tb.png",
-  "https://pub-cfd4a1112c8643b0ab5e89b05484e7fa.r2.dev/nav-voronka.png",
-  "https://pub-cfd4a1112c8643b0ab5e89b05484e7fa.r2.dev/nav-web.png",
-  "https://pub-cfd4a1112c8643b0ab5e89b05484e7fa.r2.dev/nav-zabol.png",
-  "https://pub-cfd4a1112c8643b0ab5e89b05484e7fa.r2.dev/nav-zakon.png"
+  "nav-analiz.png",
+  "nav-code.png",
+  "nav-cvet.png",
+  "nav-doc.png",
+  "nav-dogovor.png",
+  "nav-eskiz.png",
+  "nav-finanaliz.png",
+  "nav-fingram.png",
+  "nav-graf.png",
+  "nav-help.png",
+  "nav-him.png",
+  "nav-isk.png",
+  "nav-konsul.png",
+  "nav-lab.png",
+  "nav-lang.png",
+  "nav-med.png",
+  "nav-mimika.png",
+  "nav-ocen.png",
+  "nav-ped.png",
+  "nav-po.png",
+  "nav-podstroy.png",
+  "nav-presech.png",
+  "nav-prodvi.png",
+  "nav-rech.png",
+  "nav-rescom.png",
+  "nav-role.png",
+  "nav-smi.png",
+  "nav-state.png",
+  "nav-stroy.png",
+  "nav-tb.png",
+  "nav-voronka.png",
+  "nav-web.png",
+  "nav-zabol.png",
+  "nav-zakon.png"
 ];
 
 const QUALITY_IMAGES = [
-  "https://pub-cfd4a1112c8643b0ab5e89b05484e7fa.r2.dev/kach-cder.png",
-  "https://pub-cfd4a1112c8643b0ab5e89b05484e7fa.r2.dev/kach-ches.png",
-  "https://pub-cfd4a1112c8643b0ab5e89b05484e7fa.r2.dev/kach-crea1.png",
-  "https://pub-cfd4a1112c8643b0ab5e89b05484e7fa.r2.dev/kach-crea2.png",
-  "https://pub-cfd4a1112c8643b0ab5e89b05484e7fa.r2.dev/kach-em1.png",
-  "https://pub-cfd4a1112c8643b0ab5e89b05484e7fa.r2.dev/kach-em2.png",
-  "https://pub-cfd4a1112c8643b0ab5e89b05484e7fa.r2.dev/kach-nad1.png",
-  "https://pub-cfd4a1112c8643b0ab5e89b05484e7fa.r2.dev/kach-nad2.png",
-  "https://pub-cfd4a1112c8643b0ab5e89b05484e7fa.r2.dev/kach-nad3.png",
-  "https://pub-cfd4a1112c8643b0ab5e89b05484e7fa.r2.dev/kach-ob1.png",
-  "https://pub-cfd4a1112c8643b0ab5e89b05484e7fa.r2.dev/kach-ob2.png",
-  "https://pub-cfd4a1112c8643b0ab5e89b05484e7fa.r2.dev/kach-ob3.png",
-  "https://pub-cfd4a1112c8643b0ab5e89b05484e7fa.r2.dev/kach-sprav.png",
-  "https://pub-cfd4a1112c8643b0ab5e89b05484e7fa.r2.dev/kach-stress.png",
-  "https://pub-cfd4a1112c8643b0ab5e89b05484e7fa.r2.dev/kach-terpel.png",
-  "https://pub-cfd4a1112c8643b0ab5e89b05484e7fa.r2.dev/kach-toch.png",
-  "https://pub-cfd4a1112c8643b0ab5e89b05484e7fa.r2.dev/kach-usid.png",
-  "https://pub-cfd4a1112c8643b0ab5e89b05484e7fa.r2.dev/kach-vnimat1.png",
-  "https://pub-cfd4a1112c8643b0ab5e89b05484e7fa.r2.dev/kach-vnimat2.png"
+  "kach-cder.png",
+  "kach-ches.png",
+  "kach-crea1.png",
+  "kach-crea2.png",
+  "kach-em1.png",
+  "kach-em2.png",
+  "kach-nad1.png",
+  "kach-nad2.png",
+  "kach-nad3.png",
+  "kach-ob1.png",
+  "kach-ob2.png",
+  "kach-ob3.png",
+  "kach-sprav.png",
+  "kach-stress.png",
+  "kach-terpel.png",
+  "kach-toch.png",
+  "kach-usid.png",
+  "kach-vnimat1.png",
+  "kach-vnimat2.png"
 ];
 
 const BAD_CARD_IMAGES = [
-  "https://pub-cfd4a1112c8643b0ab5e89b05484e7fa.r2.dev/pod-1.png",
-  "https://pub-cfd4a1112c8643b0ab5e89b05484e7fa.r2.dev/pod-2.png",
-  "https://pub-cfd4a1112c8643b0ab5e89b05484e7fa.r2.dev/pod-3.png",
-  "https://pub-cfd4a1112c8643b0ab5e89b05484e7fa.r2.dev/pod-4.png",
-  "https://pub-cfd4a1112c8643b0ab5e89b05484e7fa.r2.dev/pod-5.png",
-  "https://pub-cfd4a1112c8643b0ab5e89b05484e7fa.r2.dev/pod-6.png",
-  "https://pub-cfd4a1112c8643b0ab5e89b05484e7fa.r2.dev/pod-7.png",
-  "https://pub-cfd4a1112c8643b0ab5e89b05484e7fa.r2.dev/pod-8.png",
-  "https://pub-cfd4a1112c8643b0ab5e89b05484e7fa.r2.dev/pod-9.png",
-  "https://pub-cfd4a1112c8643b0ab5e89b05484e7fa.r2.dev/pod-10.png",
-  "https://pub-cfd4a1112c8643b0ab5e89b05484e7fa.r2.dev/pod-11.png",
-  "https://pub-cfd4a1112c8643b0ab5e89b05484e7fa.r2.dev/pod-12.png",
-  "https://pub-cfd4a1112c8643b0ab5e89b05484e7fa.r2.dev/pod-13.png",
-  "https://pub-cfd4a1112c8643b0ab5e89b05484e7fa.r2.dev/pod-14.png",
-  "https://pub-cfd4a1112c8643b0ab5e89b05484e7fa.r2.dev/pod-15.png",
-  "https://pub-cfd4a1112c8643b0ab5e89b05484e7fa.r2.dev/pod-16.png",
-  "https://pub-cfd4a1112c8643b0ab5e89b05484e7fa.r2.dev/pod-17.png",
-  "https://pub-cfd4a1112c8643b0ab5e89b05484e7fa.r2.dev/pod-18.png",
-  "https://pub-cfd4a1112c8643b0ab5e89b05484e7fa.r2.dev/pod.png"
+  "pod-1.png",
+  "pod-2.png",
+  "pod-3.png",
+  "pod-4.png",
+  "pod-5.png",
+  "pod-6.png",
+  "pod-7.png",
+  "pod-8.png",
+  "pod-9.png",
+  "pod-10.png",
+  "pod-11.png",
+  "pod-12.png",
+  "pod-13.png",
+  "pod-14.png",
+  "pod-15.png",
+  "pod-16.png",
+  "pod-17.png",
+  "pod-18.png",
+  "pod.png"
 ];
 
 const AGES = [
