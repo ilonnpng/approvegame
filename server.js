@@ -2,7 +2,6 @@ const express = require('express');
 const { createServer } = require('http');
 const { Server } = require('socket.io');
 const cors = require('cors');
-const https = require('https');
 
 const app = express();
 app.use(cors());
@@ -12,8 +11,6 @@ app.use(cors());
 // =====================================================
 
 // База профессий с полными данными
-const BASE = 'https://pub-cfd4a1112c8643b0ab5e89b05484e7fa.r2.dev';
-
 const PROFESSION_DATA = [
   {
     id: "actor",
@@ -31,7 +28,7 @@ const PROFESSION_DATA = [
       "Какой ваш любимый фильм или театральная постановка?",
       "В каких спектаклях вы играли раньше?"
     ],
-    image: `${BASE}/prof-act.png`
+    image: "https://pub-cfd4a1112c8643b0ab5e89b05484e7fa.r2.dev/prof-act.png"
   },
   {
     id: "architect",
@@ -49,7 +46,7 @@ const PROFESSION_DATA = [
       "Каков ваш подход к дизайну?",
       "Какие тренды в архитектуре вас вдохновляют?"
     ],
-    image: `${BASE}/prof-arh.png`
+    image: "https://pub-cfd4a1112c8643b0ab5e89b05484e7fa.r2.dev/prof-arh.png"
   },
   {
     id: "doctor",
@@ -66,7 +63,7 @@ const PROFESSION_DATA = [
       "Что вы знаете о нашей организации и пациентах?",
       "Что вы знаете о клятве Гиппократа?"
     ],
-    image: `${BASE}/prof-vrach.png`
+    image: "https://pub-cfd4a1112c8643b0ab5e89b05484e7fa.r2.dev/prof-vrach.png"
   },
   {
     id: "designer",
@@ -84,7 +81,7 @@ const PROFESSION_DATA = [
       "Какой будет основной тренд в дизайне?",
       "Какие ваши источники вдохновения?"
     ],
-    image: `${BASE}/prof-design.png`
+    image: "https://pub-cfd4a1112c8643b0ab5e89b05484e7fa.r2.dev/prof-design.png"
   },
   {
     id: "journalist",
@@ -101,7 +98,7 @@ const PROFESSION_DATA = [
       "Есть ли журналисты, которые вас вдохновляют?",
       "Взялись бы вы за статью, которая может испортить репутацию?"
     ],
-    image: `${BASE}/prof-zhur.png`
+    image: "https://pub-cfd4a1112c8643b0ab5e89b05484e7fa.r2.dev/prof-zhur.png"
   },
   {
     id: "marketer",
@@ -119,7 +116,7 @@ const PROFESSION_DATA = [
       "За какими брендами следите?",
       "Как будете работать при отключении электричества?"
     ],
-    image: `${BASE}/prof-mark.png`
+    image: "https://pub-cfd4a1112c8643b0ab5e89b05484e7fa.r2.dev/prof-mark.png"
   },
   {
     id: "teacher",
@@ -136,7 +133,7 @@ const PROFESSION_DATA = [
       "Как реагируете на плохую дисциплину?",
       "Какую тему сложнее всего преподавать?"
     ],
-    image: `${BASE}/prof-ped.png`
+    image: "https://pub-cfd4a1112c8643b0ab5e89b05484e7fa.r2.dev/prof-ped.png"
   },
   {
     id: "translator",
@@ -153,7 +150,7 @@ const PROFESSION_DATA = [
       "Как справляетесь со сложным переводом?",
       "Как обрабатываете нестандартные запросы?"
     ],
-    image: `${BASE}/prof-trans.png`
+    image: "https://pub-cfd4a1112c8643b0ab5e89b05484e7fa.r2.dev/prof-trans.png"
   },
   {
     id: "police",
@@ -170,7 +167,7 @@ const PROFESSION_DATA = [
       "Бывали ли в опасных ситуациях?",
       "Почему хотите работать у нас?"
     ],
-    image: `${BASE}/prof-pol.png`
+    image: "https://pub-cfd4a1112c8643b0ab5e89b05484e7fa.r2.dev/prof-pol.png"
   },
   {
     id: "entrepreneur",
@@ -187,7 +184,7 @@ const PROFESSION_DATA = [
       "Есть ли сотрудники?",
       "Кто ваша аудитория?"
     ],
-    image: `${BASE}/prof-ip.png`
+    image: "https://pub-cfd4a1112c8643b0ab5e89b05484e7fa.r2.dev/prof-ip.png"
   }
 ];
 
@@ -671,29 +668,6 @@ app.get('/health', (req, res) => {
   });
 });
 
-// =====================================================
-// IMAGE PROXY для России (обход блокировки R2)
-// =====================================================
-app.get('/proxy-image/:filename', (req, res) => {
-  const filename = req.params.filename;
-  const imageUrl = `https://pub-cfd4a1112c8643b0ab5e89b05484e7fa.r2.dev/${filename}`;
-  
-  console.log(`📷 Proxying image: ${filename}`);
-  
-  https.get(imageUrl, (proxyRes) => {
-    // Передать заголовки
-    res.setHeader('Content-Type', proxyRes.headers['content-type'] || 'image/png');
-    res.setHeader('Cache-Control', 'public, max-age=31536000'); // Кэш на 1 год
-    res.setHeader('Access-Control-Allow-Origin', '*');
-    
-    // Передать поток данных
-    proxyRes.pipe(res);
-  }).on('error', (err) => {
-    console.error(`❌ Error proxying image ${filename}:`, err);
-    res.status(500).send('Error loading image');
-  });
-});
-
 const httpServer = createServer(app);
 const io = new Server(httpServer, {
   cors: {
@@ -1125,7 +1099,7 @@ io.on('connection', (socket) => {
 
     // Переход между фазами
     if (room.phase === 'cardDistribution') {
-      // Раздача карт -> Самопрезентация
+      // Раздача карт -> Самопрезен��ация
       room.phase = 'selfPresentation';
       room.currentPlayerIndex = 0;
     } else if (room.phase === 'trickDistribution') {
