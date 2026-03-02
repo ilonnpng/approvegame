@@ -2,9 +2,35 @@ const express = require('express');
 const { createServer } = require('http');
 const { Server } = require('socket.io');
 const cors = require('cors');
+const cookieParser = require('cookie-parser');
+const { OAuth2Client } = require('google-auth-library');
+const { PrismaClient } = require('@prisma/client');
+
+// =====================================================
+// ИНИЦИАЛИЗАЦИЯ
+// =====================================================
 
 const app = express();
-app.use(cors());
+
+// Prisma Client
+const prisma = new PrismaClient();
+
+// Google OAuth Client
+const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID || '';
+const googleClient = new OAuth2Client(GOOGLE_CLIENT_ID);
+
+// Настройки cookie
+const COOKIE_NAME = 'approve_session';
+const COOKIE_DOMAIN = process.env.COOKIE_DOMAIN || '.approvegame.ru';
+const SESSION_TTL_DAYS = parseInt(process.env.SESSION_TTL_DAYS || '30', 10);
+
+// Middleware
+app.use(express.json());
+app.use(cookieParser());
+app.use(cors({
+  origin: process.env.CORS_ORIGIN || 'https://approvegame.ru',
+  credentials: true
+}));
 
 // =====================================================
 // ИМПОРТ ДАННЫХ ИЗ ФАЙЛА
@@ -399,7 +425,7 @@ const ADDITIONS = [
   "3 шаурмечных на районе",
   "продает наставничество",
   "играет в танки с руководителем",
-  "регулярно проводит бабушек через дорогу",
+  "регулярно провоит бабушек через дорогу",
   "симпатизирует дочке руководитлч",
   "слушает только классическую музыку, никаких непристойностей!",
   "знает всевозможные формулы Excel",
@@ -407,7 +433,7 @@ const ADDITIONS = [
   "каждые выходные будет звать на рыбалку",
   "не носит носки с сандалями",
   "миллион подписчиков в соцсетях",
-  "каждый день всем приносит пирожки на работу!"
+  "каждый день всем приноси пирожки на работу!"
 ];
 
 const SABOTAGES = [
@@ -665,8 +691,194 @@ app.get('/health', (req, res) => {
     status: 'healthy',
     uptime: process.uptime(),
     rooms: rooms.size
-  });
+  })
 });
+
+// =====================================================
+// AUTHENTICATION ENDPOINTS
+// =====================================================
+
+// POST /auth/google - Авторизация через Google OAuth
+app.post('/auth/google', async (req, res) => {
+  try {
+    const { idToken } = req.body;
+    
+    if (!idToken) {
+      return res.status(400).json({ error: 'idToken is required' });
+    }
+
+    // Проверить Google ID token
+    const ticket = await googleClient.verifyIdToken({
+      idToken: idToken,
+      audience: GOOGLE_CLIENT_ID
+    });
+    
+    const payload = ticket.getPayload();
+    const googleId = payload.sub;
+    const email = payload.email;
+    const name = payload.name;
+    const avatarUrl = payload.picture;
+
+    // Найти или создать пользователя
+    let user = await prisma.user.findUnique({
+      where: { googleId: googleId }
+    });
+
+    if (!user) {
+      // Создать нового пользователя
+      user = await prisma.user.create({
+        data: {
+          googleId: googleId,
+          email: email,
+          name: name,
+          avatar: avatarUrl
+        }
+      });
+      
+      console.log(`✅ New user created: ${email}`);
+    } else {
+      console.log(`✅ User logged in: ${email}`);
+    }
+
+    // Создать сессию (expires in 30 days)
+    const expiresAt = new Date();
+    expiresAt.setDate(expiresAt.getDate() + SESSION_TTL_DAYS);
+
+    const session = await prisma.session.create({
+      data: {
+        userId: user.id,
+        expiresAt: expiresAt
+      }
+    });
+
+    // Установить cookie
+    res.cookie(COOKIE_NAME, session.id, {
+      httpOnly: true,
+      secure: true,
+      sameSite: 'lax',
+      maxAge: SESSION_TTL_DAYS * 24 * 60 * 60 * 1000, // 30 days
+      domain: COOKIE_DOMAIN
+    });
+
+    // Вернуть пользователя
+    res.json({
+      user: {
+        id: user.id,
+        email: user.email,
+        name: user.name,
+        avatar: user.avatar
+      }
+    });
+  } catch (error) {
+    console.error('❌ Google auth error:', error);
+    res.status(401).json({ error: 'Invalid Google token' });
+  }
+});
+
+// GET /me - Получить текущего пользователя
+app.get('/me', async (req, res) => {
+  try {
+    const sessionId = req.cookies[COOKIE_NAME];
+    
+    if (!sessionId) {
+      return res.status(401).json({ error: 'Not authenticated' });
+    }
+
+    // Найти сессию
+    const session = await prisma.session.findUnique({
+      where: { id: sessionId },
+      include: { user: true }
+    });
+
+    if (!session) {
+      return res.status(401).json({ error: 'Session not found' });
+    }
+
+    // Проверить, что сессия не истекла
+    if (session.expiresAt < new Date()) {
+      // Удалить истекшую сессию
+      await prisma.session.delete({
+        where: { id: sessionId }
+      });
+      
+      res.clearCookie(COOKIE_NAME);
+      return res.status(401).json({ error: 'Session expired' });
+    }
+
+    // Вернуть пользователя
+    res.json({
+      user: {
+        id: session.user.id,
+        email: session.user.email,
+        name: session.user.name,
+        avatarUrl: session.user.avatarUrl
+      }
+    });
+  } catch (error) {
+    console.error('❌ Get user error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// POST /logout - Выход из системы
+app.post('/logout', async (req, res) => {
+  try {
+    const sessionId = req.cookies[COOKIE_NAME];
+    
+    if (sessionId) {
+      // Удалить сессию из БД
+      await prisma.session.delete({
+        where: { id: sessionId }
+      }).catch(() => {
+        // Игнорируем ошибку если сессия уже удалена
+      });
+    }
+
+    // Очистить cookie
+    res.clearCookie(COOKIE_NAME);
+    res.json({ success: true });
+  } catch (error) {
+    console.error('❌ Logout error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// =====================================================
+// MIDDLEWARE
+// =====================================================
+
+// Middleware для определения пользователя
+async function attachUser(req, res, next) {
+  try {
+    const sessionId = req.cookies[COOKIE_NAME];
+    
+    if (!sessionId) {
+      req.user = null;
+      return next();
+    }
+
+    // Найти сессию
+    const session = await prisma.session.findUnique({
+      where: { id: sessionId },
+      include: { user: true }
+    });
+
+    if (!session || session.expiresAt < new Date()) {
+      req.user = null;
+      return next();
+    }
+
+    req.user = session.user;
+    next();
+  } catch (error) {
+    console.error('❌ AttachUser middleware error:', error);
+    req.user = null;
+    next();
+  }
+}
+
+// Применить middleware глобально
+app.use(attachUser);
 
 const httpServer = createServer(app);
 const io = new Server(httpServer, {
@@ -685,61 +897,79 @@ const io = new Server(httpServer, {
 // Хранилище комнат
 const rooms = new Map();
 
-// Перемешать массив
-function shuffle(array) {
-  const newArray = [...array];
-  for (let i = newArray.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [newArray[i], newArray[j]] = [newArray[j], newArray[i]];
-  }
-  return newArray;
-}
+// Grace period для переподключения (2 минуты)
+const GRACE_PERIOD_MS = 120000; // 120 секунд
+const CLEANUP_INTERVAL_MS = 30000; // Проверять каждые 30 секунд
 
-// Создать новую комнату
-function createRoom(roomCode, creatorId, creatorName, gameMode = 'group') {
-  const room = {
-    code: roomCode,
-    hostId: creatorId,
-    players: [
-      {
-        id: creatorId,
-        name: creatorName,
-        isHR: true,
-        cards: [],
-        badCards: [],
-        score: 0,
-        isReady: false
-      }
-    ],
-    phase: 'lobby',
-    gameMode: gameMode, // Режим игры: 'group' или 'audience'
-    currentPlayerIndex: 0,
-    deck: shuffle(generateCardDeck()),
-    sabotageDeck: shuffle(generateSabotageDeck()),
-    finalists: [],
-    winner: null
-  };
-  
-  rooms.set(roomCode, room);
-  return room;
-}
+// =====================================================
+// SOCKET.IO MIDDLEWARE - АВТОРИЗАЦИЯ
+// =====================================================
+
+// Middleware для определения пользователя в Socket.io
+io.use(async (socket, next) => {
+  try {
+    // Парсинг cookies из handshake
+    const cookieHeader = socket.handshake.headers.cookie;
+    
+    if (!cookieHeader) {
+      socket.user = null;
+      return next(); // Гости разрешены
+    }
+
+    // Парсинг cookie вручную
+    const cookies = {};
+    cookieHeader.split(';').forEach(cookie => {
+      const parts = cookie.split('=');
+      const key = parts.shift().trim();
+      const value = parts.join('=').trim();
+      cookies[key] = value;
+    });
+
+    const sessionId = cookies[COOKIE_NAME];
+
+    if (!sessionId) {
+      socket.user = null;
+      return next(); // Гости разрешены
+    }
+
+    // Найти сессию
+    const session = await prisma.session.findUnique({
+      where: { id: sessionId },
+      include: { user: true }
+    });
+
+    if (!session || session.expiresAt < new Date()) {
+      socket.user = null;
+      return next(); // Гости разрешены
+    }
+
+    // Привязать пользователя к сокету
+    socket.user = session.user;
+    console.log(`✅ Authenticated socket: ${socket.id} -> user: ${session.user.email}`);\n    
+    next();
+  } catch (error) {
+    console.error('❌ Socket.io auth middleware error:', error);
+    socket.user = null;
+    next(); // Гости разрешены
+  }
+});
 
 io.on('connection', (socket) => {
   console.log(`Пользователь подключился: ${socket.id}`);
 
   // Создать комнату
-  socket.on('create_room', ({ name, gameMode = 'group' }) => {
+  socket.on('create_room', ({ name, gameMode = 'group', playerId, avatarId }) => {
     const roomCode = Math.random().toString(36).substring(2, 8).toUpperCase();
-    const room = createRoom(roomCode, socket.id, name, gameMode);
+    const room = createRoom(roomCode, playerId, socket.id, name, gameMode);
     
     socket.join(roomCode);
     socket.emit('room_update', room);
     
-    console.log(`Комната создана: ${roomCode} by ${name} (режим: ${gameMode})`);
+    console.log(`✅ Комната создана: ${roomCode} by ${name} (режим: ${gameMode}, playerId: ${playerId})`);
   });
 
   // Присоединиться к комнате
-  socket.on('join_room', ({ code, name }) => {
+  socket.on('join_room', ({ code, name, playerId, avatarId }) => {
     const room = rooms.get(code);
     
     if (!room) {
@@ -747,59 +977,84 @@ io.on('connection', (socket) => {
       return;
     }
 
-    // Проверить, не присоединялся ли уже (по имени для переподключения)
-    const existingPlayerByName = room.players.find(p => p.name === name);
-    const existingPlayerById = room.players.find(p => p.id === socket.id);
+    // Найти существующего игрока по playerId (стабильный UUID)
+    const existingPlayer = findPlayerByPlayerId(room, playerId);
     
-    if (existingPlayerByName && !existingPlayerById) {
-      // Это может быть переподключение ИЛИ попытка войти с занятым ником
-      // Проверяем: если игрок с таким именем уже есть и активен - отклоняем
-      const existingSocket = io.sockets.sockets.get(existingPlayerByName.id);
-      if (existingSocket && existingSocket.connected) {
-        // Имя занято активным игроком
-        socket.emit('error', { message: 'Это имя уже занято. Придумайте другое имя.' });
-        console.log(`❌ Player tried to join with duplicate name: ${name} in room ${code}`);
-        return;
-      }
+    if (existingPlayer) {
+      // ==========================================
+      // RECONNECT: игрок с этим playerId уже есть
+      // ==========================================
+      console.log(`🔄 Player reconnecting: ${name} (playerId: ${playerId}) to room ${code}`);
       
-      // Переподключение - обновить socket.id
-      console.log(`🔄 Player ${name} reconnecting to ${code}, updating socket ID from ${existingPlayerByName.id} to ${socket.id}`);
-      existingPlayerByName.id = socket.id;
+      // Обновить socketId и статус
+      existingPlayer.socketId = socket.id;
+      existingPlayer.connected = true;
+      existingPlayer.lastSeen = Date.now();
       
-      // Если это был HR, обновить hostId
-      if (existingPlayerByName.isHR) {
-        room.hostId = socket.id;
-        console.log(`✅ HR reconnected, updated hostId to ${socket.id}`);
-      }
-    } else if (!existingPlayerById && !existingPlayerByName) {
-      // Новый игрок
+      // Если это был HR, НЕ обновляем room.hostId (он уже правильный - это playerId)
+      
+      socket.join(code);
+      socket.emit('rejoin_ok', { code });
+      io.to(code).emit('room_update', room);
+      
+      console.log(`✅ ${name} reconnected successfully`);
+    } else {
+      // ==========================================
+      // НОВЫЙ ИГРОК: playerId не найден
+      // ==========================================
+      
+      // Проверить, можно ли присоединиться
       if (room.phase !== 'lobby') {
         socket.emit('error', { message: 'Игра уже началась' });
         return;
       }
       
+      // Проверить уникальность имени с учетом grace period
+      // Имя занято если существует игрок с таким именем И:
+      // - он подключен (connected=true) ИЛИ
+      // - он в grace period (оффлайн меньше GRACE_PERIOD_MS)
+      const now = Date.now();
+      const nameIsTaken = room.players.some(p => {
+        if (p.name !== name || p.id === playerId) return false;
+        
+        // Имя занято если игрок онлайн
+        if (p.connected === true) return true;
+        
+        // Имя занято если игрок оффлайн но в grace period
+        if (p.connected === false && (now - p.lastSeen) < GRACE_PERIOD_MS) {
+          return true;
+        }
+        
+        return false;
+      });
+      
+      if (nameIsTaken) {
+        socket.emit('error', { message: 'Это имя уже занято. Придумайте другое имя.' });
+        console.log(`❌ Player tried to join with duplicate name: ${name} in room ${code}`);
+        return;
+      }
+      
+      // Создать нового игрока
       room.players.push({
-        id: socket.id,
+        id: playerId, // Стабильный UUID
+        socketId: socket.id,
         name: name,
+        avatarId: avatarId,
         isHR: false,
+        connected: true,
+        lastSeen: Date.now(),
         cards: [],
         badCards: [],
         score: 0,
         isReady: false
       });
-      console.log(`➕ New player ${name} joined ${code}`);
-    } else {
-      console.log(`✅ Player ${name} already in room ${code}`);
-    }
-
-    socket.join(code);
-    io.to(code).emit('room_update', room);
-    
-    if (!existingPlayerByName && !existingPlayerById) {
+      
+      socket.join(code);
+      io.to(code).emit('room_update', room);
       io.to(code).emit('player_joined', { playerName: name });
+      
+      console.log(`➕ New player ${name} joined ${code} (playerId: ${playerId})`);
     }
-    
-    console.log(`${name} в комнате ${code}`);
   });
 
   // Начать игру
@@ -811,7 +1066,7 @@ io.on('connection', (socket) => {
       return;
     }
 
-    const hrPlayer = room.players.find(p => p.id === socket.id);
+    const hrPlayer = findPlayerBySocketId(room, socket.id);
     if (!hrPlayer || !hrPlayer.isHR) {
       socket.emit('error', { message: 'Только HR может начать игру' });
       return;
@@ -924,7 +1179,7 @@ io.on('connection', (socket) => {
         targetPlayer.badCards = [];
       }
       // Добавить подлянку от текущего игрока
-      const giver = room.players.find(p => p.id === socket.id);
+      const giver = findPlayerBySocketId(room, socket.id);
       if (giver && giver.badCards && giver.badCards.length > 0) {
         const sabotage = giver.badCards.shift(); // Взять первую подлянку
         targetPlayer.badCards.push(sabotage);
@@ -943,7 +1198,7 @@ io.on('connection', (socket) => {
       return;
     }
 
-    const giver = room.players.find(p => p.id === socket.id);
+    const giver = findPlayerBySocketId(room, socket.id);
 
     if (!giver || giver.isHR) {
       socket.emit('error', { message: 'Только игроки могут передавать подлянки' });
@@ -1020,7 +1275,7 @@ io.on('connection', (socket) => {
       return;
     }
 
-    const hrPlayer = room.players.find(p => p.id === socket.id);
+    const hrPlayer = findPlayerBySocketId(room, socket.id);
     if (!hrPlayer || !hrPlayer.isHR) {
       socket.emit('error', { message: 'Только HR может начать финал' });
       return;
@@ -1039,7 +1294,7 @@ io.on('connection', (socket) => {
   });
 
   // Выбрать победителя
-  socket.on('choose_winner', ({ code, winnerId }) => {
+  socket.on('choose_winner', async ({ code, winnerId }) => {
     const room = rooms.get(code);
     
     if (!room) {
@@ -1047,12 +1302,11 @@ io.on('connection', (socket) => {
       return;
     }
 
-    // Найти HR игрока по hostId или по isHR флагу
-    const hrPlayer = room.players.find(p => p.isHR);
-    const isHRSocket = socket.id === room.hostId || socket.id === hrPlayer?.id;
-    
-    if (!isHRSocket) {
+    // Проверить, что это HR (правильная проверка через findPlayerBySocketId)
+    const actor = findPlayerBySocketId(room, socket.id);
+    if (!actor || !actor.isHR) {
       socket.emit('error', { message: 'Только HR может выбрать победителя' });
+      console.log(`❌ Non-HR player tried to choose winner in room ${code}`);
       return;
     }
 
@@ -1079,6 +1333,37 @@ io.on('connection', (socket) => {
     room.phase = 'winner';
 
     console.log(`✅ Winner selected in room ${code}:`, room.winner.name, 'with', room.winner.cards?.length || 0, 'cards');
+    
+    // ========================================
+    // СОХРАНЕНИЕ АНАЛИТИКИ ДЛЯ АВТОРИЗОВАННЫХ ИГРОКОВ
+    // ========================================
+    
+    // Для всех игроков в комнате: сохранить Performance если они авторизованы
+    for (const player of room.players) {
+      if (!player.isHR && player.socketId) {
+        // Найти сокет этого игрока
+        const playerSocket = io.sockets.sockets.get(player.socketId);
+        
+        if (playerSocket && playerSocket.user) {
+          // Игрок авторизован - сохранить Performance
+          try {
+            await prisma.performance.create({
+              data: {
+                userId: playerSocket.user.id,
+                roomCode: code,
+                profession: room.currentProfession?.title || 'Неизвестно',
+                score: player.scoreFromHR || player.score || null
+              }
+            });
+            
+            console.log(`📊 Performance saved for user ${playerSocket.user.email}: ${room.currentProfession?.title}, score: ${player.scoreFromHR || player.score}`);
+          } catch (error) {
+            console.error(`❌ Failed to save performance for player ${player.name}:`, error);
+          }
+        }
+      }
+    }
+    
     io.to(code).emit('room_update', room);
   });
 
@@ -1091,7 +1376,7 @@ io.on('connection', (socket) => {
       return;
     }
 
-    const hrPlayer = room.players.find(p => p.id === socket.id);
+    const hrPlayer = findPlayerBySocketId(room, socket.id);
     if (!hrPlayer || !hrPlayer.isHR) {
       socket.emit('error', { message: 'Только HR может переключать фазы' });
       return;
@@ -1099,7 +1384,7 @@ io.on('connection', (socket) => {
 
     // Переход между фазами
     if (room.phase === 'cardDistribution') {
-      // Раздача карт -> Самопрезен��ация
+      // Раздача карт -> Самопрезенация
       room.phase = 'selfPresentation';
       room.currentPlayerIndex = 0;
     } else if (room.phase === 'trickDistribution') {
@@ -1121,7 +1406,7 @@ io.on('connection', (socket) => {
     }
 
     // Найти игрока, который раскрывает карту
-    const player = room.players.find(p => p.id === socket.id);
+    const player = findPlayerBySocketId(room, socket.id);
     
     if (!player || player.isHR) {
       socket.emit('error', { message: 'Только игроки могут раскрывать карты' });
@@ -1155,7 +1440,7 @@ io.on('connection', (socket) => {
     }
 
     // Проверить, что это HR
-    const hrPlayer = room.players.find(p => p.id === socket.id);
+    const hrPlayer = findPlayerBySocketId(room, socket.id);
     if (!hrPlayer || !hrPlayer.isHR) {
       socket.emit('error', { message: 'Только HR может оценивать' });
       return;
@@ -1178,40 +1463,103 @@ io.on('connection', (socket) => {
     io.to(code).emit('room_update', room);
   });
 
-  // Отключение
-  socket.on('disconnect', () => {
-    console.log(`Пользователь отключился: ${socket.id}`);
+  // Heartbeat - обновление lastSeen
+  socket.on('heartbeat', ({ code, playerId }) => {
+    const room = rooms.get(code);
+    if (!room) return;
     
-    // Задержка перед удалением игрока (на случай переподключения)
-    setTimeout(() => {
-      // Найти комнату и удалить игрока
-      rooms.forEach((room, roomCode) => {
-        const playerIndex = room.players.findIndex(p => p.id === socket.id);
+    const player = findPlayerByPlayerId(room, playerId);
+    if (player) {
+      player.lastSeen = Date.now();
+      // Молча обновляем, не отправляем room_update
+    }
+  });
+
+  // Отключение - НЕ удаляем игрока сразу, помечаем как offline
+  socket.on('disconnect', () => {
+    console.log(`⚠️ Пользователь отключился: ${socket.id}`);
+    
+    // Найти игрока по socketId и пометить как offline
+    rooms.forEach((room, roomCode) => {
+      const player = findPlayerBySocketId(room, socket.id);
+      
+      if (player) {
+        // Пометить как offline
+        player.connected = false;
+        player.lastSeen = Date.now();
         
-        if (playerIndex !== -1) {
-          const player = room.players[playerIndex];
-          
-          // Если это HR и игра не началась - удалить комнату
-          if (player.isHR && room.phase === 'lobby') {
-            rooms.delete(roomCode);
-            io.to(roomCode).emit('error', { message: 'HR покинул комнату' });
-          } else if (player.isHR && room.phase !== 'lobby') {
-            // HR отключился во время игры - не удаляем, но уведомляем
-            console.log(`⚠️ HR временно отключился в комнате ${roomCode}, игра на паузе`);
-            // Не удаляем игрока, ждем переподключения
-          } else {
-            // Обычный игрок покинул игру
-            room.players.splice(playerIndex, 1);
-            io.to(roomCode).emit('room_update', room);
-            io.to(roomCode).emit('player_left', { playerName: player.name });
-          }
-        }
-      });
-    }, 2000); // Задержка 2 секунды для переподключения
+        console.log(`🔌 Player ${player.name} (${player.id}) marked as offline in room ${roomCode}`);
+        
+        // Отправить обновление всем участникам (чтобы HR видел offline статус)
+        io.to(roomCode).emit('room_update', room);
+        
+        // НЕ удаляем игрока! Grace period cleanup сделает это позже
+      }
+    });
   });
 });
+
+// =====================================================
+// GRACE PERIOD CLEANUP
+// =====================================================
+// Удаляем игроков, которые были offline более 120 секунд
+
+setInterval(() => {
+  const now = Date.now();
+  
+  rooms.forEach((room, roomCode) => {
+    let roomChanged = false;
+    const playersToRemove = [];
+    
+    room.players.forEach((player, index) => {
+      // Если игрок offline дольше grace period
+      if (player.connected === false && (now - player.lastSeen) > GRACE_PERIOD_MS) {
+        console.log(`🧹 Removing player ${player.name} (${player.id}) from room ${roomCode} (offline for ${Math.round((now - player.lastSeen) / 1000)}s)`);
+        playersToRemove.push(index);
+        roomChanged = true;
+      }
+    });
+    
+    // Удаляем игроков в обратном порядке (чтобы индексы не сбивались)
+    playersToRemove.reverse().forEach(index => {
+      const player = room.players[index];
+      room.players.splice(index, 1);
+      
+      // Если это был HR
+      if (player.isHR) {
+        if (room.phase === 'lobby') {
+          // HR в лобби - удалить комнату
+          console.log(`🗑️  Removing room ${roomCode} (HR offline too long in lobby)`);
+          rooms.delete(roomCode);
+          io.to(roomCode).emit('error', { message: 'HR покинул комнату' });
+          return; // Выходим, комната удалена
+        } else {
+          // HR во время игры - комната остается, но помечаем
+          console.log(`⚠️  HR offline too long in room ${roomCode} during game`);
+          // TODO: Передать роль HR другому игроку
+        }
+      }
+    });
+    
+    // Если комната всё ещё существует и были изменения
+    if (rooms.has(roomCode) && roomChanged) {
+      // Проверить, остались ли игроки
+      const activePlayers = room.players.filter(p => p.connected === true);
+      
+      if (activePlayers.length === 0) {
+        console.log(`🗑️  Removing empty room ${roomCode} (no active players)`);
+        rooms.delete(roomCode);
+      } else {
+        io.to(roomCode).emit('room_update', room);
+      }
+    }
+  });
+  
+  console.log(`🧹 Cleanup complete. Active rooms: ${rooms.size}`);
+}, CLEANUP_INTERVAL_MS);
 
 const PORT = 3000;
 httpServer.listen(PORT, () => {
   console.log(`🎮 Сервер игры запущен на http://localhost:${PORT}`);
+  console.log(`♻️  Grace period cleanup: ${GRACE_PERIOD_MS / 1000}s, interval: ${CLEANUP_INTERVAL_MS / 1000}s`);
 });
