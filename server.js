@@ -791,6 +791,138 @@ app.post('/auth/logout', async (req, res) => {
   }
 });
 
+// PUT /auth/profile - Обновление профиля
+app.put('/auth/profile', async (req, res) => {
+  try {
+    console.log('📥 PUT /auth/profile received');
+    
+    const sessionId = req.cookies[COOKIE_NAME];
+    
+    if (!sessionId) {
+      return res.status(401).json({ error: 'Not authenticated' });
+    }
+
+    // Найти сессию
+    const session = await prisma.session.findUnique({
+      where: { id: sessionId },
+      include: { user: true }
+    });
+
+    if (!session || session.expiresAt < new Date()) {
+      return res.status(401).json({ error: 'Session expired' });
+    }
+
+    const { name, avatar } = req.body;
+
+    // Валидация имени
+    if (name !== undefined) {
+      if (typeof name !== 'string' || name.trim().length < 3 || name.trim().length > 50) {
+        return res.status(400).json({ error: 'Name must be between 3 and 50 characters' });
+      }
+    }
+
+    // Обновить пользователя
+    const updatedUser = await prisma.user.update({
+      where: { id: session.userId },
+      data: {
+        ...(name !== undefined && { name: name.trim() }),
+        ...(avatar !== undefined && { avatar })
+      }
+    });
+
+    console.log('✅ Profile updated for user:', updatedUser.email);
+
+    res.json({
+      user: {
+        id: updatedUser.id,
+        email: updatedUser.email,
+        name: updatedUser.name,
+        avatar: updatedUser.avatar
+      }
+    });
+  } catch (error) {
+    console.error('❌ Update profile error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// GET /auth/stats - Статистика игрока
+app.get('/auth/stats', async (req, res) => {
+  try {
+    console.log('📥 GET /auth/stats received');
+    
+    const sessionId = req.cookies[COOKIE_NAME];
+    
+    if (!sessionId) {
+      return res.status(401).json({ error: 'Not authenticated' });
+    }
+
+    // Найти сессию
+    const session = await prisma.session.findUnique({
+      where: { id: sessionId },
+      include: { user: true }
+    });
+
+    if (!session || session.expiresAt < new Date()) {
+      return res.status(401).json({ error: 'Session expired' });
+    }
+
+    // Получить все игры пользователя
+    const performances = await prisma.performance.findMany({
+      where: { userId: session.userId },
+      orderBy: { createdAt: 'desc' }
+    });
+
+    const totalGames = performances.length;
+    const wins = performances.filter(p => p.won).length;
+    const winRate = totalGames > 0 ? Math.round((wins / totalGames) * 100) : 0;
+    
+    // Средний балл (только игры со счетом)
+    const gamesWithScore = performances.filter(p => p.score !== null);
+    const averageScore = gamesWithScore.length > 0
+      ? Math.round((gamesWithScore.reduce((sum, p) => sum + (p.score || 0), 0) / gamesWithScore.length) * 10) / 10
+      : 0;
+
+    // Топ профессия (по количеству побед)
+    const professionWins = {};
+    performances.filter(p => p.won).forEach(p => {
+      professionWins[p.profession] = (professionWins[p.profession] || 0) + 1;
+    });
+    
+    let bestProfession = null;
+    let maxWins = 0;
+    Object.entries(professionWins).forEach(([profession, winsCount]) => {
+      if (winsCount > maxWins) {
+        maxWins = winsCount;
+        bestProfession = profession;
+      }
+    });
+
+    // История последних 10 игр
+    const history = performances.slice(0, 10).map(p => ({
+      profession: p.profession,
+      score: p.score,
+      won: p.won,
+      position: p.position,
+      createdAt: p.createdAt
+    }));
+
+    console.log('✅ Stats retrieved for user:', session.user.email);
+
+    res.json({
+      totalGames,
+      wins,
+      winRate,
+      averageScore,
+      bestProfession,
+      history
+    });
+  } catch (error) {
+    console.error('❌ Get stats error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 // =====================================================
 // MIDDLEWARE
 // =====================================================
@@ -902,12 +1034,16 @@ io.on('connection', (socket) => {
   // Создать комнату
   socket.on('create_room', ({ name, gameMode = 'group', playerId, avatarId }) => {
     const roomCode = Math.random().toString(36).substring(2, 8).toUpperCase();
-    const room = createRoom(roomCode, playerId, socket.id, name, gameMode);
+    
+    // Для авторизованных пользователей используем имя из socket.user
+    const playerName = socket.user ? socket.user.name : name;
+    
+    const room = createRoom(roomCode, playerId, socket.id, playerName, gameMode);
     
     socket.join(roomCode);
     socket.emit('room_update', room);
     
-    console.log(`✅ Комната создана: ${roomCode} by ${name} (режим: ${gameMode}, playerId: ${playerId})`);
+    console.log(`✅ Комната создана: ${roomCode} by ${playerName} (режим: ${gameMode}, playerId: ${playerId}${socket.user ? ', authenticated' : ''})`);
   });
 
   // Присоединиться к комнате
@@ -919,10 +1055,13 @@ io.on('connection', (socket) => {
       return;
     }
 
+    // Для авторизованных пользователей используем имя из socket.user
+    const playerName = socket.user ? socket.user.name : name;
+
     const existingPlayer = findPlayerByPlayerId(room, playerId);
     
     if (existingPlayer) {
-      console.log(`🔄 Player reconnecting: ${name} (playerId: ${playerId}) to room ${code}`);
+      console.log(`🔄 Player reconnecting: ${playerName} (playerId: ${playerId}) to room ${code}`);
       
       existingPlayer.socketId = socket.id;
       existingPlayer.connected = true;
@@ -932,7 +1071,7 @@ io.on('connection', (socket) => {
       socket.emit('rejoin_ok', { code });
       io.to(code).emit('room_update', room);
       
-      console.log(`✅ ${name} reconnected successfully`);
+      console.log(`✅ ${playerName} reconnected successfully`);
     } else {
       if (room.phase !== 'lobby') {
         socket.emit('error', { message: 'Игра уже началась' });
@@ -961,7 +1100,7 @@ io.on('connection', (socket) => {
       room.players.push({
         id: playerId,
         socketId: socket.id,
-        name: name,
+        name: playerName,
         avatarId: avatarId,
         isHR: false,
         connected: true,
@@ -974,9 +1113,9 @@ io.on('connection', (socket) => {
       
       socket.join(code);
       io.to(code).emit('room_update', room);
-      io.to(code).emit('player_joined', { playerName: name });
+      io.to(code).emit('player_joined', { playerName: playerName });
       
-      console.log(`➕ New player ${name} joined ${code} (playerId: ${playerId})`);
+      console.log(`➕ New player ${playerName} joined ${code} (playerId: ${playerId}${socket.user ? ', authenticated' : ''})`);
     }
   });
 
@@ -1232,26 +1371,34 @@ io.on('connection', (socket) => {
 
     console.log(`✅ Winner selected in room ${code}:`, room.winner.name, 'with', room.winner.cards?.length || 0, 'cards');
     
-    // Сохранение аналитики для авторизованных игроков
-    for (const player of room.players) {
-      if (!player.isHR && player.socketId) {
-        const playerSocket = io.sockets.sockets.get(player.socketId);
-        
-        if (playerSocket && playerSocket.user) {
-          try {
-            await prisma.performance.create({
-              data: {
-                userId: playerSocket.user.id,
-                roomCode: code,
-                profession: room.currentProfession?.title || 'Неизвестно',
-                score: player.scoreFromHR || player.score || null
-              }
-            });
-            
-            console.log(`📊 Performance saved for user ${playerSocket.user.email}: ${room.currentProfession?.title}, score: ${player.scoreFromHR || player.score}`);
-          } catch (error) {
-            console.error(`❌ Failed to save performance for player ${player.name}:`, error);
-          }
+    // ✅ РАСШИРЕННАЯ АНАЛИТИКА: сохранение с won и position
+    const candidates = room.players.filter(p => !p.isHR);
+    
+    // Сортируем кандидатов по баллам для определения позиций
+    const sortedCandidates = [...candidates].sort((a, b) => (b.scoreFromHR || b.score || 0) - (a.scoreFromHR || a.score || 0));
+    
+    for (let position = 0; position < sortedCandidates.length; position++) {
+      const player = sortedCandidates[position];
+      const playerSocket = io.sockets.sockets.get(player.socketId);
+      
+      if (playerSocket && playerSocket.user) {
+        try {
+          const won = player.id === winnerId;
+          
+          await prisma.performance.create({
+            data: {
+              userId: playerSocket.user.id,
+              roomCode: code,
+              profession: room.currentProfession?.title || 'Неизвестно',
+              score: player.scoreFromHR || player.score || null,
+              won: won,
+              position: position + 1 // 1-based position
+            }
+          });
+          
+          console.log(`📊 Performance saved for user ${playerSocket.user.email}: ${room.currentProfession?.title}, score: ${player.scoreFromHR || player.score}, won: ${won}, position: ${position + 1}`);
+        } catch (error) {
+          console.error(`❌ Failed to save performance for player ${player.name}:`, error);
         }
       }
     }
