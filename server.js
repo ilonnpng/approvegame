@@ -18,9 +18,16 @@ app.set('trust proxy', 1);
 // Prisma Client
 const prisma = new PrismaClient();
 
-// Google OAuth Client
-const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID || '';
+// ✅ Google OAuth Client с поддержкой нескольких Client IDs
+const GOOGLE_CLIENT_IDS = [
+  process.env.GOOGLE_CLIENT_ID,
+  process.env.GOOGLE_CLIENT_ID_2
+].filter(Boolean); // Удаляем пустые значения
+
+const GOOGLE_CLIENT_ID = GOOGLE_CLIENT_IDS[0] || ''; // Для обратной совместимости
 const googleClient = new OAuth2Client(GOOGLE_CLIENT_ID);
+
+console.log(`🔑 Google OAuth configured with ${GOOGLE_CLIENT_IDS.length} client ID(s)`);
 
 // Настройки cookie
 const COOKIE_NAME = 'session_token';
@@ -42,25 +49,6 @@ app.use(cors({
   allowedHeaders: ['Content-Type', 'Authorization']
 }));
 
-module.exports = {
-  apps: [
-    {
-      name: "approve-server",
-      script: "server.js",
-      cwd: "/root/bunker-hr-game",
-      exec_mode: "fork",
-      instances: 1,
-      env: {
-        NODE_ENV: "production",
-        PORT: "3001",
-        COOKIE_DOMAIN: ".approvegame.ru",
-        // если у тебя только approvegame.ru без www — можешь убрать www в server.js, но тут ок
-        CORS_ORIGIN: "https://approvegame.ru",
-        GOOGLE_CLIENT_ID: "739141043490-ibqqfnjohigbatngeu2vkv5rmji86kp5.apps.googleusercontent.com"
-      }
-    }
-  ]
-};
 // =====================================================
 // ИМПОРТ ДАННЫХ ИЗ ФАЙЛА
 // =====================================================
@@ -639,6 +627,55 @@ app.get('/auth/debug', (req, res) => {
   });
 });
 
+// ✅ DEBUG ENDPOINT для декодирования JWT токена
+app.get('/auth/token-info', (req, res) => {
+  try {
+    const { token } = req.query;
+    
+    if (!token) {
+      return res.status(400).json({ ok: false, reason: 'token_required' });
+    }
+    
+    // Попытка разобрать JWT без проверки подписи
+    const parts = token.split('.');
+    
+    if (parts.length !== 3) {
+      return res.json({ ok: false, reason: 'not_jwt', parts: parts.length });
+    }
+    
+    try {
+      // Декодировать payload (средняя часть JWT)
+      const payload = JSON.parse(Buffer.from(parts[1], 'base64').toString('utf8'));
+      
+      return res.json({
+        ok: true,
+        payload: {
+          aud: payload.aud,
+          azp: payload.azp,
+          iss: payload.iss,
+          exp: payload.exp,
+          email: payload.email,
+          sub: payload.sub,
+          name: payload.name
+        },
+        exp_date: payload.exp ? new Date(payload.exp * 1000).toISOString() : null,
+        is_expired: payload.exp ? (payload.exp * 1000 < Date.now()) : null
+      });
+    } catch (decodeError) {
+      return res.json({ 
+        ok: false, 
+        reason: 'invalid_base64',
+        error: decodeError.message,
+        token_preview: token.substring(0, 30) + '...',
+        token_length: token.length
+      });
+    }
+  } catch (error) {
+    console.error('❌ Token info error:', error);
+    return res.status(500).json({ ok: false, reason: 'server_error', error: error.message });
+  }
+});
+
 // POST /auth/google - Авторизация через Google OAuth
 app.post('/auth/google', async (req, res) => {
   try {
@@ -656,7 +693,7 @@ app.post('/auth/google', async (req, res) => {
     // Проверить Google ID token
     const ticket = await googleClient.verifyIdToken({
       idToken: idToken,
-      audience: GOOGLE_CLIENT_ID
+      audience: GOOGLE_CLIENT_IDS
     });
     
     const payload = ticket.getPayload();
@@ -719,7 +756,33 @@ app.post('/auth/google', async (req, res) => {
       }
     });
   } catch (error) {
-    console.error('❌ Google auth error:', error);
+    console.error('❌ Google auth error:', error.message);
+    console.error('   Error stack:', error.stack);
+    
+    // ✅ БЕЗОПАСНЫЙ РАЗБОР JWT PAYLOAD для диагностики
+    const { idToken } = req.body;
+    if (idToken && typeof idToken === 'string') {
+      try {
+        const parts = idToken.split('.');
+        if (parts.length === 3) {
+          // Декодируем payload без проверки подписи
+          const payload = JSON.parse(Buffer.from(parts[1], 'base64').toString('utf8'));
+          console.error('   Token payload (decoded without verification):');
+          console.error('     aud:', payload.aud);
+          console.error('     azp:', payload.azp);
+          console.error('     iss:', payload.iss);
+          console.error('     exp:', payload.exp, payload.exp ? `(${new Date(payload.exp * 1000).toISOString()})` : '');
+          console.error('     email:', payload.email || 'N/A');
+          console.error('     expired:', payload.exp ? (payload.exp * 1000 < Date.now()) : 'N/A');
+        } else {
+          console.error('   Token is not a valid JWT (expected 3 parts, got', parts.length + ')');
+        }
+      } catch (decodeError) {
+        console.error('   Failed to decode token payload:', decodeError.message);
+        console.error('   Token preview:', idToken.substring(0, 30) + '... (length:', idToken.length + ')');
+      }
+    }
+    
     res.status(401).json({ error: 'Invalid Google token' });
   }
 });
