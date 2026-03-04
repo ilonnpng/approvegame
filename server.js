@@ -42,6 +42,25 @@ app.use(cors({
   allowedHeaders: ['Content-Type', 'Authorization']
 }));
 
+module.exports = {
+  apps: [
+    {
+      name: "approve-server",
+      script: "server.js",
+      cwd: "/root/bunker-hr-game",
+      exec_mode: "fork",
+      instances: 1,
+      env: {
+        NODE_ENV: "production",
+        PORT: "3001",
+        COOKIE_DOMAIN: ".approvegame.ru",
+        // если у тебя только approvegame.ru без www — можешь убрать www в server.js, но тут ок
+        CORS_ORIGIN: "https://approvegame.ru",
+        GOOGLE_CLIENT_ID: "739141043490-ibqqfnjohigbatngeu2vkv5rmji86kp5.apps.googleusercontent.com"
+      }
+    }
+  ]
+};
 // =====================================================
 // ИМПОРТ ДАННЫХ ИЗ ФАЙЛА
 // =====================================================
