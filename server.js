@@ -7,7 +7,6 @@ const { OAuth2Client } = require('google-auth-library');
 const { PrismaClient } = require('@prisma/client');
 
 // =====================================================
-// ИНИЦИАЛИЗАЦИЯ
 // =====================================================
 
 const app = express();
