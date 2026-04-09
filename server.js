@@ -19,15 +19,26 @@ app.set('trust proxy', 1);
 const prisma = new PrismaClient();
 
 // ✅ Google OAuth Client с поддержкой нескольких Client IDs
-const GOOGLE_CLIENT_IDS = [
+// Поддерживаем:
+// - GOOGLE_CLIENT_ID
+// - GOOGLE_CLIENT_ID_2
+// - GOOGLE_CLIENT_IDS="id1,id2,id3"
+// + fallback на текущий clientId фронта (чтобы не падать при пустом env)
+const FRONTEND_GOOGLE_CLIENT_ID = '739141043490-ibqqfnjohigbatngeu2vkv5rmji86kp5.apps.googleusercontent.com';
+const GOOGLE_CLIENT_IDS = Array.from(new Set([
   process.env.GOOGLE_CLIENT_ID,
-  process.env.GOOGLE_CLIENT_ID_2
-].filter(Boolean); // Удаляем пустые значения
+  process.env.GOOGLE_CLIENT_ID_2,
+  ...(process.env.GOOGLE_CLIENT_IDS || '')
+    .split(',')
+    .map(id => id.trim())
+    .filter(Boolean),
+  FRONTEND_GOOGLE_CLIENT_ID
+].filter(Boolean)));
 
-const GOOGLE_CLIENT_ID = GOOGLE_CLIENT_IDS[0] || ''; // Для обратной совместимости
-const googleClient = new OAuth2Client(GOOGLE_CLIENT_ID);
+// Для verifyIdToken не обязательно передавать clientId в конструктор.
+const googleClient = new OAuth2Client();
 
-console.log(`🔑 Google OAuth configured with ${GOOGLE_CLIENT_IDS.length} client ID(s)`);
+console.log(`🔑 Google OAuth configured with ${GOOGLE_CLIENT_IDS.length} client ID(s):`, GOOGLE_CLIENT_IDS);
 
 // Настройки cookie
 const COOKIE_NAME = 'session_token';
@@ -697,6 +708,14 @@ app.post('/auth/google', async (req, res) => {
     });
     
     const payload = ticket.getPayload();
+    const tokenAudience = payload?.aud;
+    if (!tokenAudience || !GOOGLE_CLIENT_IDS.includes(tokenAudience)) {
+      console.error('❌ Google token audience mismatch');
+      console.error('   Token aud:', tokenAudience || 'N/A');
+      console.error('   Allowed aud:', GOOGLE_CLIENT_IDS);
+      return res.status(401).json({ error: 'Google token audience mismatch' });
+    }
+
     const googleId = payload.sub;
     const email = payload.email;
     const name = payload.name;
