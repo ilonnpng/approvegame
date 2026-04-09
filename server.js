@@ -3,11 +3,11 @@ const { createServer } = require('http');
 const { Server } = require('socket.io');
 const cors = require('cors');
 const cookieParser = require('cookie-parser');
-const { OAuth2Client } = require('google-auth-library');
+const crypto = require('crypto');
 const { PrismaClient } = require('@prisma/client');
 
 // =====================================================
-
+// ИНИЦИАЛИЗАЦИЯ
 // =====================================================
 
 const app = express();
@@ -18,27 +18,13 @@ app.set('trust proxy', 1);
 // Prisma Client
 const prisma = new PrismaClient();
 
-// ✅ Google OAuth Client с поддержкой нескольких Client IDs
-// Поддерживаем:
-// - GOOGLE_CLIENT_ID
-// - GOOGLE_CLIENT_ID_2
-// - GOOGLE_CLIENT_IDS="id1,id2,id3"
-// + fallback на текущий clientId фронта (чтобы не падать при пустом env)
-const FRONTEND_GOOGLE_CLIENT_ID = '739141043490-ibqqfnjohigbatngeu2vkv5rmji86kp5.apps.googleusercontent.com';
-const GOOGLE_CLIENT_IDS = Array.from(new Set([
-  process.env.GOOGLE_CLIENT_ID,
-  process.env.GOOGLE_CLIENT_ID_2,
-  ...(process.env.GOOGLE_CLIENT_IDS || '')
-    .split(',')
-    .map(id => id.trim())
-    .filter(Boolean),
-  FRONTEND_GOOGLE_CLIENT_ID
-].filter(Boolean)));
-
-// Для verifyIdToken не обязательно передавать clientId в конструктор.
-const googleClient = new OAuth2Client();
-
-console.log(`🔑 Google OAuth configured with ${GOOGLE_CLIENT_IDS.length} client ID(s):`, GOOGLE_CLIENT_IDS);
+const PASSWORD_SCRYPT_N = 16384;
+const PASSWORD_SCRYPT_R = 8;
+const PASSWORD_SCRYPT_P = 1;
+const PASSWORD_SCRYPT_KEYLEN = 64;
+const LOGIN_REGEX = /^[a-zA-Z0-9._-]{3,32}$/;
+const AVATAR_MAX_LENGTH = 16;
+const PASSWORD_MIN_LENGTH = 6;
 
 // Настройки cookie
 const COOKIE_NAME = 'session_token';
@@ -623,6 +609,90 @@ app.get('/health', (req, res) => {
   })
 });
 
+function hashPassword(password) {
+  return new Promise((resolve, reject) => {
+    const salt = crypto.randomBytes(16).toString('hex');
+    crypto.scrypt(
+      password,
+      salt,
+      PASSWORD_SCRYPT_KEYLEN,
+      { N: PASSWORD_SCRYPT_N, r: PASSWORD_SCRYPT_R, p: PASSWORD_SCRYPT_P },
+      (err, derivedKey) => {
+        if (err) {
+          reject(err);
+          return;
+        }
+        resolve(`${salt}:${derivedKey.toString('hex')}`);
+      }
+    );
+  });
+}
+
+function verifyPassword(password, encodedHash) {
+  return new Promise((resolve, reject) => {
+    const parts = (encodedHash || '').split(':');
+    if (parts.length !== 2) {
+      resolve(false);
+      return;
+    }
+
+    const [salt, expectedHash] = parts;
+    crypto.scrypt(
+      password,
+      salt,
+      PASSWORD_SCRYPT_KEYLEN,
+      { N: PASSWORD_SCRYPT_N, r: PASSWORD_SCRYPT_R, p: PASSWORD_SCRYPT_P },
+      (err, derivedKey) => {
+        if (err) {
+          reject(err);
+          return;
+        }
+
+        const expected = Buffer.from(expectedHash, 'hex');
+        if (expected.length !== derivedKey.length) {
+          resolve(false);
+          return;
+        }
+
+        resolve(crypto.timingSafeEqual(expected, derivedKey));
+      }
+    );
+  });
+}
+
+function toPublicUser(user) {
+  return {
+    id: user.id,
+    login: user.login ?? null,
+    email: user.email ?? null,
+    name: user.name,
+    avatar: user.avatar ?? null
+  };
+}
+
+async function createSession(userId) {
+  const expiresAt = new Date();
+  expiresAt.setDate(expiresAt.getDate() + SESSION_TTL_DAYS);
+
+  return prisma.session.create({
+    data: {
+      userId,
+      expiresAt
+    }
+  });
+}
+
+function setSessionCookie(res, sessionId) {
+  res.cookie(COOKIE_NAME, sessionId, {
+    httpOnly: true,
+    secure: true,
+    sameSite: 'none',
+    domain: COOKIE_DOMAIN,
+    path: '/',
+    maxAge: SESSION_TTL_DAYS * 24 * 60 * 60 * 1000
+  });
+}
+
 // =====================================================
 // AUTHENTICATION ENDPOINTS
 // =====================================================
@@ -638,171 +708,91 @@ app.get('/auth/debug', (req, res) => {
   });
 });
 
-// ✅ DEBUG ENDPOINT для декодирования JWT токена
-app.get('/auth/token-info', (req, res) => {
+// POST /auth/register - Регистрация по логину и паролю
+app.post('/auth/register', async (req, res) => {
   try {
-    const { token } = req.query;
-    
-    if (!token) {
-      return res.status(400).json({ ok: false, reason: 'token_required' });
+    const rawLogin = typeof req.body?.login === 'string' ? req.body.login.trim().toLowerCase() : '';
+    const rawPassword = typeof req.body?.password === 'string' ? req.body.password : '';
+    const rawName = typeof req.body?.name === 'string' ? req.body.name.trim() : '';
+    const rawAvatar = typeof req.body?.avatar === 'string' ? req.body.avatar.trim() : null;
+
+    if (!LOGIN_REGEX.test(rawLogin)) {
+      return res.status(400).json({ error: 'Логин: 3-32 символа, только латиница/цифры/._-' });
     }
-    
-    // Попытка разобрать JWT без проверки подписи
-    const parts = token.split('.');
-    
-    if (parts.length !== 3) {
-      return res.json({ ok: false, reason: 'not_jwt', parts: parts.length });
+
+    if (rawPassword.length < PASSWORD_MIN_LENGTH) {
+      return res.status(400).json({ error: `Пароль должен быть минимум ${PASSWORD_MIN_LENGTH} символов` });
     }
-    
-    try {
-      // Декодировать payload (средняя часть JWT)
-      const payload = JSON.parse(Buffer.from(parts[1], 'base64').toString('utf8'));
-      
-      return res.json({
-        ok: true,
-        payload: {
-          aud: payload.aud,
-          azp: payload.azp,
-          iss: payload.iss,
-          exp: payload.exp,
-          email: payload.email,
-          sub: payload.sub,
-          name: payload.name
-        },
-        exp_date: payload.exp ? new Date(payload.exp * 1000).toISOString() : null,
-        is_expired: payload.exp ? (payload.exp * 1000 < Date.now()) : null
-      });
-    } catch (decodeError) {
-      return res.json({ 
-        ok: false, 
-        reason: 'invalid_base64',
-        error: decodeError.message,
-        token_preview: token.substring(0, 30) + '...',
-        token_length: token.length
-      });
+
+    if (rawName.length < 2 || rawName.length > 50) {
+      return res.status(400).json({ error: 'Имя должно быть от 2 до 50 символов' });
     }
+
+    if (rawAvatar && rawAvatar.length > AVATAR_MAX_LENGTH) {
+      return res.status(400).json({ error: 'Аватар слишком длинный' });
+    }
+
+    const existing = await prisma.user.findUnique({
+      where: { login: rawLogin }
+    });
+
+    if (existing) {
+      return res.status(409).json({ error: 'Этот логин уже занят' });
+    }
+
+    const passwordHash = await hashPassword(rawPassword);
+
+    const user = await prisma.user.create({
+      data: {
+        login: rawLogin,
+        passwordHash,
+        name: rawName,
+        avatar: rawAvatar || null
+      }
+    });
+
+    const session = await createSession(user.id);
+    setSessionCookie(res, session.id);
+
+    console.log(`✅ New local user created: @${user.login}`);
+    res.status(201).json({ user: toPublicUser(user) });
   } catch (error) {
-    console.error('❌ Token info error:', error);
-    return res.status(500).json({ ok: false, reason: 'server_error', error: error.message });
+    console.error('❌ Register error:', error);
+    res.status(500).json({ error: 'Internal server error' });
   }
 });
 
-// POST /auth/google - Авторизация через Google OAuth
-app.post('/auth/google', async (req, res) => {
+// POST /auth/login - Вход по логину и паролю
+app.post('/auth/login', async (req, res) => {
   try {
-    const { idToken } = req.body;
-    
-    console.log('📥 POST /auth/google received');
-    console.log('   req.secure:', req.secure);
-    console.log('   req.protocol:', req.protocol);
-    console.log('   X-Forwarded-Proto:', req.headers['x-forwarded-proto']);
-    
-    if (!idToken) {
-      return res.status(400).json({ error: 'idToken is required' });
+    const rawLogin = typeof req.body?.login === 'string' ? req.body.login.trim().toLowerCase() : '';
+    const rawPassword = typeof req.body?.password === 'string' ? req.body.password : '';
+
+    if (!LOGIN_REGEX.test(rawLogin) || !rawPassword) {
+      return res.status(400).json({ error: 'Некорректный логин или пароль' });
     }
 
-    // Проверить Google ID token
-    const ticket = await googleClient.verifyIdToken({
-      idToken: idToken,
-      audience: GOOGLE_CLIENT_IDS
+    const user = await prisma.user.findUnique({
+      where: { login: rawLogin }
     });
-    
-    const payload = ticket.getPayload();
-    const tokenAudience = payload?.aud;
-    if (!tokenAudience || !GOOGLE_CLIENT_IDS.includes(tokenAudience)) {
-      console.error('❌ Google token audience mismatch');
-      console.error('   Token aud:', tokenAudience || 'N/A');
-      console.error('   Allowed aud:', GOOGLE_CLIENT_IDS);
-      return res.status(401).json({ error: 'Google token audience mismatch' });
+
+    if (!user || !user.passwordHash) {
+      return res.status(401).json({ error: 'Неверный логин или пароль' });
     }
 
-    const googleId = payload.sub;
-    const email = payload.email;
-    const name = payload.name;
-    const avatarUrl = payload.picture;
-
-    // Найти или создать пользователя
-    let user = await prisma.user.findUnique({
-      where: { googleId: googleId }
-    });
-
-    if (!user) {
-      user = await prisma.user.create({
-        data: {
-          googleId: googleId,
-          email: email,
-          name: name,
-          avatar: avatarUrl
-        }
-      });
-      
-      console.log(`✅ New user created: ${email}`);
-    } else {
-      console.log(`✅ User logged in: ${email}`);
+    const passwordOk = await verifyPassword(rawPassword, user.passwordHash);
+    if (!passwordOk) {
+      return res.status(401).json({ error: 'Неверный логин или пароль' });
     }
 
-    // Создать сессию (expires in 30 days)
-    const expiresAt = new Date();
-    expiresAt.setDate(expiresAt.getDate() + SESSION_TTL_DAYS);
+    const session = await createSession(user.id);
+    setSessionCookie(res, session.id);
 
-    const session = await prisma.session.create({
-      data: {
-        userId: user.id,
-        expiresAt: expiresAt
-      }
-    });
-
-    // ✅ ИСПРАВЛЕНО: Cookie с правильными параметрами
-    console.log('🍪 Setting cookie:', COOKIE_NAME);
-    res.cookie(COOKIE_NAME, session.id, {
-      httpOnly: true,
-      secure: true,
-      sameSite: 'none',
-      domain: '.approvegame.ru',
-      path: '/',
-      maxAge: SESSION_TTL_DAYS * 24 * 60 * 60 * 1000
-    });
-
-    console.log('✅ Cookie set successfully');
-
-    // Вернуть пользователя
-    res.json({
-      user: {
-        id: user.id,
-        email: user.email,
-        name: user.name,
-        avatar: user.avatar
-      }
-    });
+    console.log(`✅ Local user logged in: @${user.login}`);
+    res.json({ user: toPublicUser(user) });
   } catch (error) {
-    console.error('❌ Google auth error:', error.message);
-    console.error('   Error stack:', error.stack);
-    
-    // ✅ БЕЗОПАСНЫЙ РАЗБОР JWT PAYLOAD для диагностики
-    const { idToken } = req.body;
-    if (idToken && typeof idToken === 'string') {
-      try {
-        const parts = idToken.split('.');
-        if (parts.length === 3) {
-          // Декодируем payload без проверки подписи
-          const payload = JSON.parse(Buffer.from(parts[1], 'base64').toString('utf8'));
-          console.error('   Token payload (decoded without verification):');
-          console.error('     aud:', payload.aud);
-          console.error('     azp:', payload.azp);
-          console.error('     iss:', payload.iss);
-          console.error('     exp:', payload.exp, payload.exp ? `(${new Date(payload.exp * 1000).toISOString()})` : '');
-          console.error('     email:', payload.email || 'N/A');
-          console.error('     expired:', payload.exp ? (payload.exp * 1000 < Date.now()) : 'N/A');
-        } else {
-          console.error('   Token is not a valid JWT (expected 3 parts, got', parts.length + ')');
-        }
-      } catch (decodeError) {
-        console.error('   Failed to decode token payload:', decodeError.message);
-        console.error('   Token preview:', idToken.substring(0, 30) + '... (length:', idToken.length + ')');
-      }
-    }
-    
-    res.status(401).json({ error: 'Invalid Google token' });
+    console.error('❌ Login error:', error);
+    res.status(500).json({ error: 'Internal server error' });
   }
 });
 
@@ -848,16 +838,11 @@ app.get('/auth/me', async (req, res) => {
       return res.status(401).json({ user: null });
     }
 
-    console.log('✅ Session valid, returning user:', session.user.email);
+    console.log('✅ Session valid, returning user:', session.user.login || session.user.email || session.user.id);
 
     // Вернуть пользователя
     res.json({
-      user: {
-        id: session.user.id,
-        email: session.user.email,
-        name: session.user.name,
-        avatar: session.user.avatar
-      }
+      user: toPublicUser(session.user)
     });
   } catch (error) {
     console.error('❌ Get user error:', error);
@@ -881,7 +866,7 @@ app.post('/auth/logout', async (req, res) => {
 
     // ✅ ИСПРАВЛЕНО: clearCookie с правильными параметрами
     res.clearCookie(COOKIE_NAME, {
-      domain: '.approvegame.ru',
+      domain: COOKIE_DOMAIN,
       path: '/'
     });
     
@@ -917,8 +902,14 @@ app.put('/auth/profile', async (req, res) => {
 
     // Валидация имени
     if (name !== undefined) {
-      if (typeof name !== 'string' || name.trim().length < 3 || name.trim().length > 50) {
-        return res.status(400).json({ error: 'Name must be between 3 and 50 characters' });
+      if (typeof name !== 'string' || name.trim().length < 2 || name.trim().length > 50) {
+        return res.status(400).json({ error: 'Name must be between 2 and 50 characters' });
+      }
+    }
+
+    if (avatar !== undefined) {
+      if (typeof avatar !== 'string' || avatar.trim().length > AVATAR_MAX_LENGTH) {
+        return res.status(400).json({ error: 'Avatar must be a short emoji string' });
       }
     }
 
@@ -927,19 +918,14 @@ app.put('/auth/profile', async (req, res) => {
       where: { id: session.userId },
       data: {
         ...(name !== undefined && { name: name.trim() }),
-        ...(avatar !== undefined && { avatar })
+        ...(avatar !== undefined && { avatar: avatar.trim() || null })
       }
     });
 
-    console.log('✅ Profile updated for user:', updatedUser.email);
+    console.log('✅ Profile updated for user:', updatedUser.login || updatedUser.email || updatedUser.id);
 
     res.json({
-      user: {
-        id: updatedUser.id,
-        email: updatedUser.email,
-        name: updatedUser.name,
-        avatar: updatedUser.avatar
-      }
+      user: toPublicUser(updatedUser)
     });
   } catch (error) {
     console.error('❌ Update profile error:', error);
@@ -1008,7 +994,7 @@ app.get('/auth/stats', async (req, res) => {
       createdAt: p.createdAt
     }));
 
-    console.log('✅ Stats retrieved for user:', session.user.email);
+    console.log('✅ Stats retrieved for user:', session.user.login || session.user.email || session.user.id);
 
     res.json({
       totalGames,
@@ -1119,7 +1105,7 @@ io.use(async (socket, next) => {
     }
 
     socket.user = session.user;
-    console.log(`✅ Authenticated socket: ${socket.id} -> user: ${session.user.email}`);
+    console.log(`✅ Authenticated socket: ${socket.id} -> user: ${session.user.login || session.user.email || session.user.id}`);
     
     next();
   } catch (error) {
@@ -1497,7 +1483,7 @@ io.on('connection', (socket) => {
             }
           });
           
-          console.log(`📊 Performance saved for user ${playerSocket.user.email}: ${room.currentProfession?.title}, score: ${player.scoreFromHR || player.score}, won: ${won}, position: ${position + 1}`);
+          console.log(`📊 Performance saved for user ${playerSocket.user.login || playerSocket.user.email || playerSocket.user.id}: ${room.currentProfession?.title}, score: ${player.scoreFromHR || player.score}, won: ${won}, position: ${position + 1}`);
         } catch (error) {
           console.error(`❌ Failed to save performance for player ${player.name}:`, error);
         }
